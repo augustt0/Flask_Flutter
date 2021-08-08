@@ -11,13 +11,13 @@ from tinydb import TinyDB, Query
 # Extras
 import os
 
-app = flask(__name__)
+app = flask.Flask(__name__)
 
 
 # Get the current working directory
 cwd = os.getcwd()
 
-# Initialize database
+# Initialize database at the current working directory
 db = TinyDB('{0}/db.json'.format(cwd))
 
 table = db.table(f'users')
@@ -47,18 +47,18 @@ def saveUserData(username,name,lastname,email,phone):
         # It's new
         table.insert({'username': username,'name': name, 'lastname': lastname, 'email': email, 'phone': phone})
 
-# UPLOAD USER DATA
+# GET USER DATA
 @app.route('/api/v1/uploads/users', methods=['POST'])
 def uploadUserData():
     if request.method == 'POST':
-        username=request.json['username']
-        name=request.json['name']
-        lastname=request.json['lastname']
-        email=request.json['email']
-        phone=request.json['phone']
+        username=request.form['username']
+        name=request.form['name']
+        lastname=request.form['lastname']
+        email=request.form['email']
+        phone=request.form['phone']
         
         # Verify all data fields
-        if name == None or lastname == None or phone == None or email == None:
+        if username == None or name == None or lastname == None or phone == None or email == None:
             return gen_error('There are missing data fields.')
         else:
             # Data verified, we save in tinydb
@@ -73,27 +73,26 @@ def uploadUserData():
         return gen_error('Wrong method.')
 
 # SHOW USER DATA
-def getUserData(username):
+def showUserData(username):
     # Does the user exists?
     user = Query()
     reply = table.search(user.username == username)
     if len(reply) > 0:
         # It exists
-        gen_error('User already exists.')
-        return [reply[0]['username'],reply[0]['name'],reply[0]['lastname'],reply[0]['email'],reply[0]['phone']],
+        return reply[0]['username'],reply[0]['name'],reply[0]['lastname'],reply[0]['email'],reply[0]['phone'],
     else:
         gen_error('User does not exist.')
 
 # RETRIEVE USER DATA
-@app.route('/api/v1/uploads/users/<username>', methods=['GET'])
+@app.route('/api/v1/retrieve/user/<username>')
 def retrieveUserData(username):
-    if request.method == 'GET':
-        # Verify all data fields
-        if username == None:
-            return gen_error('There are missing data fields.')
-        else:
-            # Data verified, we save in tinydb
-            username,name,lastname,email,phone = getUserData(username)
+    # Verify all data fields
+    if username == None:
+        return gen_error('There are missing data fields.')
+    else:
+        # Data verified, we save in tinydb
+        if showUserData(username) != None:
+            username,name,lastname,email,phone = showUserData(username)
             response = jsonify({
                     'status': 'SUCCESS',
                     'message': 'Successfully received data',
@@ -107,5 +106,5 @@ def retrieveUserData(username):
                 })
             response.headers.add('Access-Control-Allow-Origin', '*')
             return response
-    else:
-        return gen_error('Wrong method.')
+        else:
+            return gen_error('No user found.')
