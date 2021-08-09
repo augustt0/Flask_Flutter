@@ -1,6 +1,8 @@
+import 'dart:io';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 import 'User.dart';
@@ -44,15 +46,89 @@ class _MyHomePageState extends State<MyHomePage> {
     super.initState();
   }
 
-  Future<User> fetchUser(String username) async {
+  void fetchUser(String username) async {
     // Search for a user
     setState(() {
       loading2 = true;
     });
+    // We set our URL which will be our server's IP address, in this case it's my own computer so localhost (10.0.2.2 because im using an emulator)
+    var url = 'http://10.0.2.2:5000/api/v1/retrieve/user/$username';
 
-    setState(() {
-      loading2 = false;
-    });
+    // Wait for response
+    var dio = Dio();
+
+    var response = await dio.get(url,
+        options: new Options(contentType: 'application/x-www-form-urlencoded'));
+
+    // We check everything is okay by asking for the response code.
+    if (response.statusCode == 200) {
+      setState(() {
+        loading2 = false;
+      });
+      // Request sent successfully
+
+      // Check for internal server errors
+      if (response.data['status'] == "SUCCESS") {
+        User responseUser = new User(
+          username: response.data['data']['username'],
+          name: response.data['data']['name'],
+          lastName: response.data['data']['lastname'],
+          email: response.data['data']['email'],
+          phone: response.data['data']['phone'],
+        );
+        // We show a dialog indicating success
+        showDialog(
+            context: context,
+            builder: (context) => SimpleDialog(
+                  title: Text('Success'),
+                  children: [
+                    Padding(
+                        padding: EdgeInsets.all(10),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text('Username ${responseUser.username}'),
+                            Text('Name ${responseUser.name}'),
+                            Text('Last name ${responseUser.lastName}'),
+                            Text('Email ${responseUser.email}'),
+                            Text('Phone ${responseUser.phone}'),
+                          ],
+                        ))
+                  ],
+                ));
+      }else{
+        showDialog(
+          context: context,
+          builder: (context) => SimpleDialog(
+                title: Text('Error'),
+                children: [
+                  Padding(
+                    padding: EdgeInsets.all(10),
+                    child: Text(
+                        response.data['message']),
+                  )
+                ],
+              ));
+      }
+    } else {
+      setState(() {
+        loading2 = false;
+      });
+      // There was an error
+      print(response.data.toString());
+      showDialog(
+          context: context,
+          builder: (context) => SimpleDialog(
+                title: Text('Error'),
+                children: [
+                  Padding(
+                    padding: EdgeInsets.all(10),
+                    child: Text(
+                        'Error when trying to search ${newUser.username} in the database.'),
+                  )
+                ],
+              ));
+    }
   }
 
   void sendData() async {
@@ -62,30 +138,35 @@ class _MyHomePageState extends State<MyHomePage> {
     });
 
     // We set our URL which will be our server's IP address, in this case it's my own computer so localhost (10.0.2.2 because im using an emulator)
-    var url = Uri.http('10.0.2.2:5000', '/api/v1/uploads/users');
+    var url = 'http://10.0.2.2:5000/api/v1/uploads/users';
 
     // Create the body
-    var msj = jsonEncode({
+    Map<String, dynamic> msj = {
       "username": newUser.username,
       "name": newUser.name,
       "lastname": newUser.lastName,
       "email": newUser.email,
       "phone": newUser.phone.toString()
-    });
+    };
+
+    // Encode message as json
+    String jsonString = json.encode(msj);
+
+    print(msj);
 
     // Wait for response
-    var response = await http.post(url,
-        body: msj);
+    var dio = Dio();
+
+    var response = await dio.post(url,
+        data: msj,
+        options: new Options(contentType: 'application/x-www-form-urlencoded'));
 
     // We check everything is okay by asking for the response code.
     if (response.statusCode == 200) {
       // Request sent successfully
 
-      //We convert response to a JSON
-      dynamic responseJson = json.decode(response.body);
-
       // Check for internal server errors
-      if (responseJson['status'] == "SUCCESS") {
+      if (response.data['status'] == "SUCCESS") {
         setState(() {
           loading = false;
         });
@@ -102,13 +183,26 @@ class _MyHomePageState extends State<MyHomePage> {
                     )
                   ],
                 ));
+      }else{
+        showDialog(
+          context: context,
+          builder: (context) => SimpleDialog(
+                title: Text('Error'),
+                children: [
+                  Padding(
+                    padding: EdgeInsets.all(10),
+                    child: Text(
+                        response.data['message']),
+                  )
+                ],
+              ));
       }
     } else {
       setState(() {
         loading = false;
       });
       // There was an error
-      print(response.body);
+      print(response.data.toString());
       showDialog(
           context: context,
           builder: (context) => SimpleDialog(
@@ -286,37 +380,45 @@ class _MyHomePageState extends State<MyHomePage> {
               'Search user',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 30),
             ),
-            Column(
-              children: [
-                TextField(
-                  decoration: InputDecoration(
-                      border: OutlineInputBorder(),
-                      hintText: 'Search username'),
-                  onChanged: (text) => searchUsername = text,
-                ),
-                TextButton(
-                    onPressed: () {
-                      FocusScope.of(context).unfocus();
-                      if (searchUsername.isNotEmpty && !loading2) {
-                        fetchUser(searchUsername);
-                      } else {
-                        showDialog(
-                            context: context,
-                            builder: (context) => SimpleDialog(
-                                  title: Text('Error'),
-                                  children: [
-                                    Padding(
-                                      padding: EdgeInsets.all(10),
-                                      child: Text(
-                                          'You must insert a search term.'),
-                                    )
-                                  ],
-                                ));
-                      }
-                    },
-                    child: Text('Search user')),
-              ],
-            )
+            loading2
+                ? Center(
+                    child: CircularProgressIndicator(),
+                  )
+                : Column(
+                    children: [
+                      Column(
+                        children: [
+                          TextField(
+                            decoration: InputDecoration(
+                                border: OutlineInputBorder(),
+                                hintText: 'Search username'),
+                            onChanged: (text) => searchUsername = text,
+                          ),
+                          TextButton(
+                              onPressed: () {
+                                FocusScope.of(context).unfocus();
+                                if (searchUsername.isNotEmpty && !loading2) {
+                                  fetchUser(searchUsername);
+                                } else {
+                                  showDialog(
+                                      context: context,
+                                      builder: (context) => SimpleDialog(
+                                            title: Text('Error'),
+                                            children: [
+                                              Padding(
+                                                padding: EdgeInsets.all(10),
+                                                child: Text(
+                                                    'You must insert a search term.'),
+                                              )
+                                            ],
+                                          ));
+                                }
+                              },
+                              child: Text('Search user')),
+                        ],
+                      )
+                    ],
+                  )
           ],
         ),
       ),
